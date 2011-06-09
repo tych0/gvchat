@@ -62,6 +62,11 @@ def synchronized(lock_name):
   return wrap
 
 class Chat(object):
+  """ Implements an ncurses chat client. It has two windows on the
+  virtual screen: one for displaying chat history and one for
+  entering text. As this interface matures, I may split it out and
+  make an XMPP backend for it as well, since mcabber doesn't support
+  MUC. """
   def __init__(self):
     self.curses_lock = threading.Lock()
 
@@ -85,6 +90,7 @@ class Chat(object):
 
   @synchronized("curses_lock")
   def update(self):
+    """ Redraw the window with the current history. """
     (cursory, cursorx) = curses.getsyx()
     (rows, cols) = self.chatscreen.getmaxyx()
 
@@ -92,16 +98,18 @@ class Chat(object):
       self.chatscreen.addstr(row, 0, line) 
       self.chatscreen.clrtoeol()
 
-    self.chatscreen.refresh()
     curses.setsyx(cursory, cursorx)
+    self.chatscreen.refresh()
 
   def user_input(self):
+    """ Get some user input and return it. """
     cmd = self.textpad.edit()
     self.entryscreen.clear()
     return cmd.strip()
 
   @synchronized("curses_lock")
   def message(self, who, what):
+    """ Add a message to the history. """
     (rows, cols) = self.chatscreen.getmaxyx()
 
     def message_lines(message):
@@ -121,18 +129,8 @@ class Chat(object):
     if len(self.history) > rows:
       self.history = self.history[-rows:]
 
-  def get_status(self):
-    return self._status;
-
-  def set_status(self, status):
-    (rows, cols) = self.chatscreen.getmaxyx()
-
-    # trim the status to at most the number of columns
-    status = status[:cols]
-
-  status = property(get_status, set_status)
-
 class GVChat(Chat):
+  """ Implements a google voice chat client. """
   def __init__(self, user, password):
     Chat.__init__(self)
 
@@ -155,6 +153,8 @@ class GVChat(Chat):
     divs = BeautifulSoup.SoupStrainer('div')
     tree = BeautifulSoup.BeautifulSoup(data, parseOnlyThese=divs)
 
+    # We need to know who to send texts to, as that information is
+    # not included with each message.
     msgtype = str(tree.find("span", attrs={"class": "gc-message-type"}))
     m = re.search('\((\d{3})\) (\d{3})-(\d{4})', msgtype)
     self.to_phone = ''.join(m.groups())
@@ -176,6 +176,8 @@ class GVChat(Chat):
       self.message(sms["from"][:-1], sms["text"])
 
   def timedupdate(self, timeout):
+    """ Update the display now and fire this method again in
+    `timeout' seconds. """
     self.getsms()
     self.update()
 
