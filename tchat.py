@@ -30,19 +30,10 @@ class _Textbox(Textbox):
   def __init__(*args, **kwargs):
     Textbox.__init__(*args, **kwargs)
 
-  def edit(self, validate=None):
-    """Edit in the window and collect the results. Results are given on Enter
-    as well as ^g"""
-    while 1:
-      ch = self.win.getch()
-      if validate:
-        ch = validate(ch)
-      if not ch:
-        continue
-      if not self.do_command(ch) or ch == 10: # break on enter
-        break
-      self.win.refresh()
-    return self.gather()
+  def do_command(self, ch):
+    if ch == 10:
+      return 0
+    return Textbox.do_command(self, ch)
 
 # Since curses is not thread safe and we do curses operations from multiple
 # threads, we need to synchronize. This decorator does that.
