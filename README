@@ -1,0 +1,20 @@
+tchat is an ncurses based interface to google voice. It uses
+pygooglevoice (and thus polling and screen scraping) to interface
+with google voice. It presents an interface similar to chat clients
+(e.g. pidgin, mcabber), allowing you to "chat" via text messages.
+
+It uses a password stored in python keyring. Specifically, it
+requires that the password for the 'gmail' service and your supplied
+username (currently a constant in tchat.py) be your password to
+login. You can do this by booting up python:
+
+tycho@mittens:~$ python
+Python 2.6.5 (r265:79063, Apr 16 2010, 13:57:41) 
+[GCC 4.4.3] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> import keyring
+>>> keyring.set_password("gmail", "tycho@tycho.ws", "secret")
+
+tchat displays only the most recent "conversation". It seems that
+google voice resets these every 497 messages; tchat should seamlessly
+move on to the next conversation, so you don't miss a beat.
