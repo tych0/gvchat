@@ -17,6 +17,7 @@ import curses
 import re
 import BeautifulSoup
 import keyring
+import string
 
 from curses.textpad import Textbox
 
@@ -31,7 +32,7 @@ class _Textbox(Textbox):
     Textbox.__init__(*args, **kwargs)
 
   def do_command(self, ch):
-    if ch == 10:
+    if ch == 10: # Enter
       return 0
     return Textbox.do_command(self, ch)
 
@@ -82,21 +83,19 @@ class Chat(object):
   @synchronized("curses_lock")
   def update(self):
     """ Redraw the window with the current history. """
-    (cursory, cursorx) = curses.getsyx()
     (rows, cols) = self.chatscreen.getmaxyx()
 
     for (row, line) in zip(range(len(self.history)), self.history):
       self.chatscreen.addstr(row, 0, line) 
       self.chatscreen.clrtoeol()
 
-    curses.setsyx(cursory, cursorx)
     self.chatscreen.refresh()
 
   def user_input(self):
     """ Get some user input and return it. """
     cmd = self.textpad.edit()
     self.entryscreen.clear()
-    return cmd.strip()
+    return string.replace(cmd, '\n', '')
 
   @synchronized("curses_lock")
   def message(self, who, what):
@@ -123,10 +122,11 @@ class Chat(object):
 class GVChat(Chat):
   """ Implements a google voice chat client. """
   def __init__(self, user, password):
-    Chat.__init__(self)
-
     self.gv = Voice()
     self.gv.login(user, password)
+
+    Chat.__init__(self)
+
     self.timer = None
     self.to_phone = None
     self.timedupdate(30)
@@ -187,7 +187,13 @@ class GVChat(Chat):
     self.gv.send_sms(self.to_phone, msg)
 
 def main():
-  passwd = keyring.get_password('gmail', GOOGLE_VOICE_USERNAME)
+  passwd = None
+  import gnomekeyring
+  try:
+    # if the user has a keyring password, try to get it, otherwise, prompt them.
+    passwd = keyring.get_password('gmail', GOOGLE_VOICE_USERNAME)
+  except gnomekeyring.IOError:
+    pass
   with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
     while True:
       chat.update()
