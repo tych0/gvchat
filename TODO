@@ -1,5 +1,2 @@
 * make update not move the cursor
-* make textbox always be in insert mode
-* fix line break bug in sent messages
-* html decode the messages before displaying them
 

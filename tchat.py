@@ -15,11 +15,11 @@ GOOGLE_VOICE_USERNAME = "tycho@tycho.ws"
 import threading
 import curses
 import re
-import BeautifulSoup
 import keyring
 import string
 
 from curses.textpad import Textbox
+from BeautifulSoup import SoupStrainer, BeautifulSoup, BeautifulStoneSoup
 
 from googlevoice import Voice
 
@@ -141,8 +141,8 @@ class GVChat(Chat):
     data = self.gv.sms.datafunc()
     data = re.search(r'<html><\!\[CDATA\[([^\]]*)', data, re.DOTALL).groups()[0]
 
-    divs = BeautifulSoup.SoupStrainer('div')
-    tree = BeautifulSoup.BeautifulSoup(data, parseOnlyThese=divs)
+    divs = SoupStrainer('div')
+    tree = BeautifulSoup(data, parseOnlyThese=divs)
 
     # We need to know who to send texts to, as that information is
     # not included with each message.
@@ -160,6 +160,9 @@ class GVChat(Chat):
       for span in spans :
         cl = span["class"].replace('gc-message-sms-', '')
         msgitem[cl] = (" ".join(span.findAll(text=True))).strip()
+      msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
+                            convertEntities=BeautifulStoneSoup.HTML_ENTITIES
+                          ).contents[0]
       self.smses.append(msgitem)
     
     # Now that we have the SMSes, we can add their text and render them.
