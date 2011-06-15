@@ -108,21 +108,19 @@ class Chat(object):
       words = words[1:]
       while len(words) > 0:
         while True: 
-          # if we ran out of things to print, we're done.
-          if len(words) == 0:
-            break
+          accum += " "
           # if the word is too huge to fit on the screen, split it
           # into parts
           if len(words[0]) > cols:
-            first_part = words[0][:cols - 1 - len(accum)]
+            first_part = words[0][:cols - len(accum)]
             words[0] = words[0][len(first_part):]
             accum += first_part
-          elif len(accum) + len(words[0]) + 1 < cols:
+          elif len(accum) + len(words[0]) < cols:
             # otherwise, just grab this word off the front
-            accum += " " + words[0]
+            accum += words[0]
             words = words[1:]
-          # have we filled up accum?
-          else:
+          # have we filled up accum? are we out of stuff to print?
+          if len(accum) >= cols or len(words) == 0:
             break
         yield accum
         accum = "   "
