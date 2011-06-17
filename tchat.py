@@ -70,6 +70,11 @@ class Chat(object):
     self.textpad = _Textbox(self.entryscreen, insert_mode=True)
     self.textpad.stripspaces = True
     self.history = []
+
+    self.global_screen.leaveok(True)
+    self.chatscreen.leaveok(True)
+    self.entryscreen.leaveok(False)
+
     self.update()
 
   def __enter__(self):
@@ -83,13 +88,18 @@ class Chat(object):
   @synchronized("curses_lock")
   def update(self):
     """ Redraw the window with the current history. """
+    (cursory, cursorx) = self.entryscreen.getyx()
     (rows, cols) = self.chatscreen.getmaxyx()
 
     for (row, line) in zip(range(len(self.history)), self.history):
       self.chatscreen.addstr(row, 0, line) 
       self.chatscreen.clrtoeol()
 
-    self.chatscreen.refresh()
+    self.entryscreen.move(cursory, cursorx)
+    self.entryscreen.cursyncup()
+    self.chatscreen.noutrefresh()
+    self.entryscreen.noutrefresh()
+    curses.doupdate()
 
   def user_input(self):
     """ Get some user input and return it. """

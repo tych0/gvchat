@@ -1,2 +1,4 @@
-* make update not move the cursor
+* add spellchecking to textbox
+* add ability to initiate new text messages (roster suppport in chat
+  window?)
 
