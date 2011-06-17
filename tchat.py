@@ -62,12 +62,12 @@ class Chat(object):
   def __init__(self):
     self.curses_lock = threading.Lock()
 
-    global_screen = curses.initscr()
-    (globaly, globalx) = global_screen.getmaxyx()
+    self.global_screen = curses.initscr()
+    (globaly, globalx) = self.global_screen.getmaxyx()
     curses.noecho()
     self.chatscreen = curses.newwin(globaly-3, globalx, 0, 0)
     self.entryscreen = curses.newwin(3, globalx, globaly-3, 0)
-    self.textpad = _Textbox(self.entryscreen)
+    self.textpad = _Textbox(self.entryscreen, insert_mode=True)
     self.textpad.stripspaces = True
     self.history = []
     self.update()
