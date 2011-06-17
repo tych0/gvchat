@@ -228,7 +228,6 @@ def main():
     pass
   with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
     while True:
-      chat.update()
       cmd = chat.user_input()
       if cmd == '/quit':
         break
