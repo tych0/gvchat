@@ -95,7 +95,10 @@ class Chat(object):
     """ Get some user input and return it. """
     cmd = self.textpad.edit()
     self.entryscreen.clear()
-    return string.replace(cmd, '\n', '')
+    # strip the newlines out of the middle of the words
+    cmd = string.replace(cmd, '\n', '')
+    # remove unprintable characters
+    return ''.join(c if c in printable else '' for c in cmd)
 
   @synchronized("curses_lock")
   def message(self, who, what):
