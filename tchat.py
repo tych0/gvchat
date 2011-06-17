@@ -112,9 +112,9 @@ class Chat(object):
       while len(words) > 0:
         while True: 
           accum += " "
-          # if the word is too huge to fit on the screen, split it
-          # into parts
-          if len(words[0]) > cols:
+          if len(words[0]) >= cols - 3:
+            # if the word is too huge to fit on the screen (note that
+            # there's 3 spaces for padding), split it into parts
             first_part = words[0][:cols - len(accum)]
             words[0] = words[0][len(first_part):]
             accum += first_part
@@ -122,11 +122,15 @@ class Chat(object):
             # otherwise, just grab this word off the front
             accum += words[0]
             words = words[1:]
+          else:
+            # the word is not too big to fit on the screen, but it
+            # is too big for this line
+            break
           # have we filled up accum? are we out of stuff to print?
           if len(accum) >= cols or len(words) == 0:
             break
         yield accum
-        accum = "   "
+        accum = "  "
 
     for line in message_lines(who+': '+what):
       self.history.append(line)
