@@ -22,6 +22,7 @@ from curses.textpad import Textbox
 from BeautifulSoup import SoupStrainer, BeautifulSoup, BeautifulStoneSoup
 
 from googlevoice import Voice
+from googlevoice.util import LoginError
 
 class _Textbox(Textbox):
   """ curses.textpad.Textbox requires users to ^g on completion, which is sort
@@ -226,23 +227,26 @@ def main():
     passwd = keyring.get_password('gmail', GOOGLE_VOICE_USERNAME)
   except gnomekeyring.IOError:
     pass
-  with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
-    while True:
-      cmd = chat.user_input()
-      if cmd == '/quit':
-        break
-      if cmd == '/refresh':
-        chat.getsms()
-      if not cmd.startswith('/'):
-        # Spawn a thread to handle sending the SMS and updating the chat
-        # screen. This way the UI doesn't block for users when google is being
-        # slow to respond :-)
-        def sms_sender_thread():
-          chat.sendsms(cmd)
+  try:
+    with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
+      while True:
+        cmd = chat.user_input()
+        if cmd == '/quit':
+          break
+        if cmd == '/refresh':
           chat.getsms()
-          chat.update()
-        t = threading.Thread(target=sms_sender_thread)
-        t.start()
+        if not cmd.startswith('/'):
+          # Spawn a thread to handle sending the SMS and updating the chat
+          # screen. This way the UI doesn't block for users when google is being
+          # slow to respond :-)
+          def sms_sender_thread():
+            chat.sendsms(cmd)
+            chat.getsms()
+            chat.update()
+          t = threading.Thread(target=sms_sender_thread)
+          t.start()
+  except LoginError:
+    print 'Login failed.'
 
 if __name__ == "__main__":
   main()
