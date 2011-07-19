@@ -109,7 +109,7 @@ class Chat(object):
     # strip the newlines out of the middle of the words
     cmd = string.replace(cmd, '\n', '')
     # remove unprintable characters
-    return ''.join(c if c in string.printable else '' for c in cmd)
+    return (''.join(c if c in string.printable else '' for c in cmd)).strip()
 
   @synchronized("curses_lock")
   def message(self, who, what):
