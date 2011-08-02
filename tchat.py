@@ -190,10 +190,11 @@ class GVChat(Chat):
       for span in spans :
         cl = span["class"].replace('gc-message-sms-', '')
         msgitem[cl] = (" ".join(span.findAll(text=True))).strip()
-      msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
-                            convertEntities=BeautifulStoneSoup.HTML_ENTITIES
-                          ).contents[0]
-      self.smses.append(msgitem)
+      if msgitem["text"]:
+        msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
+                              convertEntities=BeautifulStoneSoup.HTML_ENTITIES
+                            ).contents[0]
+        self.smses.append(msgitem)
     
     # Now that we have the SMSes, we can add their text and render them.
     for sms in self.smses:
