@@ -17,6 +17,7 @@ import curses
 import re
 import keyring
 import string
+import itertools
 
 from curses.textpad import Textbox
 from BeautifulSoup import SoupStrainer, BeautifulSoup, BeautifulStoneSoup
@@ -92,30 +93,6 @@ class Chat(object):
     (cursory, cursorx) = self.entryscreen.getyx()
     (rows, cols) = self.chatscreen.getmaxyx()
 
-    for (row, line) in zip(range(len(self.history)), self.history):
-      self.chatscreen.addstr(row, 0, line) 
-      self.chatscreen.clrtoeol()
-
-    self.entryscreen.move(cursory, cursorx)
-    self.entryscreen.cursyncup()
-    self.chatscreen.noutrefresh()
-    self.entryscreen.noutrefresh()
-    curses.doupdate()
-
-  def user_input(self):
-    """ Get some user input and return it. """
-    cmd = self.textpad.edit()
-    self.entryscreen.clear()
-    # strip the newlines out of the middle of the words
-    cmd = string.replace(cmd, '\n', '')
-    # remove unprintable characters
-    return (''.join(c if c in string.printable else '' for c in cmd)).strip()
-
-  @synchronized("curses_lock")
-  def message(self, who, what):
-    """ Add a message to the history. """
-    (rows, cols) = self.chatscreen.getmaxyx()
-
     def message_lines(message):
       words = message.split()
       accum = words[0]
@@ -142,10 +119,39 @@ class Chat(object):
             break
         yield accum
         accum = "  "
+    lines = list(itertools.chain(*[message_lines(msg) for msg in self.history]))
 
-    for line in message_lines(who+': '+what):
-      self.history.append(line)
+    # we can only print up to rows number of lines...
+    lines = lines[-rows:]
 
+    for (row, line) in zip(range(len(lines)), lines):
+      self.chatscreen.addstr(row, 0, line) 
+      self.chatscreen.clrtoeol()
+
+    self.entryscreen.move(cursory, cursorx)
+    self.entryscreen.cursyncup()
+    self.chatscreen.noutrefresh()
+    self.entryscreen.noutrefresh()
+    curses.doupdate()
+
+  def user_input(self):
+    """ Get some user input and return it. """
+    cmd = self.textpad.edit()
+    self.entryscreen.clear()
+    # strip the newlines out of the middle of the words
+    cmd = string.replace(cmd, '\n', '')
+    # remove unprintable characters
+    return (''.join(c if c in string.printable else '' for c in cmd)).strip()
+
+  @synchronized("curses_lock")
+  def message(self, who, what):
+    """ Add a message to the history. """
+    (rows, cols) = self.chatscreen.getmaxyx()
+    self.history.append(who+': '+what)
+
+    # We can only display at most rows number of messages, since we display one
+    # message on each line. (Note that we may display fewer messages than are
+    # in self.history, since messages might be longer than one line and wrap.)
     if len(self.history) > rows:
       self.history = self.history[-rows:]
 
