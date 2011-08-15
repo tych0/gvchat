@@ -282,10 +282,11 @@ def main():
     pass
   try:
     with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
-      while True:
+      running = True
+      while running:
         cmd = chat.user_input()
         if cmd == '/quit':
-          break
+          running = False
         if cmd == '/refresh':
           chat.getsms()
         if not cmd.startswith('/'):
@@ -293,25 +294,29 @@ def main():
           # screen. This way the UI doesn't block for users when google is being
           # slow to respond :-)
           def sms_sender_thread():
-            # The number of pending responses.
-            chat.increment_response_count()
+            try:
+              # The number of pending responses.
+              chat.increment_response_count()
 
-            # Redraw the status bar to let the user know we're active.
-            chat.update()
+              # Redraw the status bar to let the user know we're active.
+              chat.update()
 
-            chat.sendsms(cmd)
-            chat.getsms()
+              chat.sendsms(cmd)
+              chat.getsms()
 
-            # No more pending requests
-            chat.decrement_response_count()
+              # No more pending requests
+              chat.decrement_response_count()
 
-            # tell the user we've deactivated
-            chat.update()
+              # tell the user we've deactivated
+              chat.update()
+            except KeyboardInterrupt:
+              running = False
 
           t = threading.Thread(target=sms_sender_thread)
           t.start()
   except LoginError:
     print 'Login failed.'
-
+  except KeyboardInterrupt:
+    pass
 if __name__ == "__main__":
   main()
