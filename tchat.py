@@ -174,8 +174,8 @@ class GVChat(Chat):
     self.gv = Voice()
     self.gv.login(user, password)
 
-    self.response_count_lock = threading.Lock()
-    self.response_count = 0
+    self.thread_count_lock = threading.Lock()
+    self.thread_count = 0
     self.to_phone = None
     self.to_name  = None
 
@@ -184,18 +184,18 @@ class GVChat(Chat):
     self.timer = None
     self.timedupdate(30)
 
-  @synchronized("response_count_lock")
-  def increment_response_count(self):
-    self.response_count += 1
+  @synchronized("thread_count_lock")
+  def increment_thread_count(self):
+    self.thread_count += 1
 
-  @synchronized("response_count_lock")
-  def decrement_response_count(self):
-    self.response_count -= 1
+  @synchronized("thread_count_lock")
+  def decrement_thread_count(self):
+    self.thread_count -= 1
 
   def status(self):
     """ Draw a fancy status bar. It has a * if there are pending google
     requests and lists the chatter's name and phone number. """
-    active = '*' if self.response_count > 0 else '-'
+    active = '*' if self.thread_count > 0 else '-'
 
     if self.to_phone:
       phone = '(%s) %s - %s' % (self.to_phone[:3], self.to_phone[3:6], self.to_phone[6:])
@@ -255,7 +255,12 @@ class GVChat(Chat):
   def timedupdate(self, timeout):
     """ Update the display now and fire this method again in
     `timeout' seconds. """
+    self.increment_thread_count()
+    self.update()
+
     self.getsms()
+
+    self.decrement_thread_count()
     self.update()
 
     # recycle the timedupdate
@@ -296,7 +301,7 @@ def main():
           def sms_sender_thread():
             try:
               # The number of pending responses.
-              chat.increment_response_count()
+              chat.increment_thread_count()
 
               # Redraw the status bar to let the user know we're active.
               chat.update()
@@ -305,7 +310,7 @@ def main():
               chat.getsms()
 
               # No more pending requests
-              chat.decrement_response_count()
+              chat.decrement_thread_count()
 
               # tell the user we've deactivated
               chat.update()
