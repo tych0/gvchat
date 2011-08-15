@@ -61,14 +61,19 @@ class Chat(object):
   entering text. As this interface matures, I may split it out and
   make an XMPP backend for it as well, since mcabber doesn't support
   MUC. """
+
+  CHATBOX_SIZE = 3
+
   def __init__(self):
     self.curses_lock = threading.Lock()
 
     self.global_screen = curses.initscr()
     (globaly, globalx) = self.global_screen.getmaxyx()
     curses.noecho()
-    self.chatscreen = curses.newwin(globaly-3, globalx, 0, 0)
-    self.entryscreen = curses.newwin(3, globalx, globaly-3, 0)
+    # one row for status bar, and CHATBOX_SIZE rowsd for the chatbox
+    self.chatscreen = curses.newwin(globaly-Chat.CHATBOX_SIZE, globalx, 0, 0)
+    self.entryscreen = curses.newwin(Chat.CHATBOX_SIZE, globalx, globaly-Chat.CHATBOX_SIZE, 0)
+
     self.textpad = _Textbox(self.entryscreen, insert_mode=True)
     self.textpad.stripspaces = True
     self.history = []
@@ -86,6 +91,11 @@ class Chat(object):
     curses.nocbreak()
     curses.echo()
     curses.endwin()
+
+  def status(self):
+    """ Draw a generic status bar of "-"s. """
+    (y, x) = self.chatscreen.getmaxyx()
+    self.chatscreen.addstr(y-1, 0, '-' * (x-1))
 
   @synchronized("curses_lock")
   def update(self):
@@ -121,12 +131,15 @@ class Chat(object):
         accum = "  "
     lines = list(itertools.chain(*[message_lines(msg) for msg in self.history]))
 
-    # we can only print up to rows number of lines...
-    lines = lines[-rows:]
+    # we can only print up to rows number of lines, and we save the last row
+    # for the status bar
+    lines = lines[-(rows-1):]
 
     for (row, line) in zip(range(len(lines)), lines):
       self.chatscreen.addstr(row, 0, line) 
       self.chatscreen.clrtoeol()
+
+    self.status()
 
     self.entryscreen.move(cursory, cursorx)
     self.entryscreen.cursyncup()
@@ -161,11 +174,41 @@ class GVChat(Chat):
     self.gv = Voice()
     self.gv.login(user, password)
 
+    self.response_count_lock = threading.Lock()
+    self.response_count = 0
+    self.to_phone = None
+    self.to_name  = None
+
     Chat.__init__(self)
 
     self.timer = None
-    self.to_phone = None
     self.timedupdate(30)
+
+  @synchronized("response_count_lock")
+  def increment_response_count(self):
+    self.response_count += 1
+
+  @synchronized("response_count_lock")
+  def decrement_response_count(self):
+    self.response_count -= 1
+
+  def status(self):
+    """ Draw a fancy status bar. It has a * if there are pending google
+    requests and lists the chatter's name and phone number. """
+    active = '*' if self.response_count > 0 else '-'
+
+    if self.to_phone:
+      phone = '(%s) %s - %s' % (self.to_phone[:3], self.to_phone[3:6], self.to_phone[6:])
+    else:
+      phone = ''
+
+    name = self.to_name if self.to_name else ''
+    
+    (y, x) = self.chatscreen.getmaxyx()
+    form = '{:'+ active +'^' + str(x - 1) + '}'
+
+    status_string = form.format(' %s | %s ' % (name, phone))
+    self.chatscreen.addstr(y-1, 0, status_string)
 
   def getsms(self):
     """ Update the GVChat object with the first SMS thread in your
@@ -204,7 +247,10 @@ class GVChat(Chat):
     
     # Now that we have the SMSes, we can add their text and render them.
     for sms in self.smses:
-      self.message(sms["from"][:-1], sms["text"])
+      name = sms["from"][:-1]
+      if name != 'Me':
+        self.to_name = name
+      self.message(name, sms["text"])
 
   def timedupdate(self, timeout):
     """ Update the display now and fire this method again in
@@ -247,9 +293,21 @@ def main():
           # screen. This way the UI doesn't block for users when google is being
           # slow to respond :-)
           def sms_sender_thread():
+            # The number of pending responses.
+            chat.increment_response_count()
+
+            # Redraw the status bar to let the user know we're active.
+            chat.update()
+
             chat.sendsms(cmd)
             chat.getsms()
+
+            # No more pending requests
+            chat.decrement_response_count()
+
+            # tell the user we've deactivated
             chat.update()
+
           t = threading.Thread(target=sms_sender_thread)
           t.start()
   except LoginError:
