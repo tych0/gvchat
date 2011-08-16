@@ -65,7 +65,7 @@ class Chat(object):
   CHATBOX_SIZE = 3
 
   def __init__(self):
-    self.curses_lock = threading.Lock()
+    self.curses_lock = threading.RLock()
 
     self.global_screen = curses.initscr()
     (globaly, globalx) = self.global_screen.getmaxyx()
@@ -95,6 +95,7 @@ class Chat(object):
     curses.echo()
     curses.endwin()
 
+  @synchronized("curses_lock")
   def status(self):
     """ Draw a generic status bar of "-"s. """
     (y, x) = self.chatscreen.getmaxyx()
@@ -207,6 +208,7 @@ class GVChat(Chat):
   def decrement_thread_count(self):
     self.thread_count -= 1
 
+  @synchronized("curses_lock")
   def status(self):
     """ Draw a fancy status bar. It has a * if there are pending google
     requests and lists the chatter's name and phone number. """
@@ -261,11 +263,13 @@ class GVChat(Chat):
         self.smses.append(msgitem)
     
     # Now that we have the SMSes, we can add their text and render them.
+    self.curses_lock.acquire()
     for sms in self.smses:
       name = sms["from"][:-1]
       if name != 'Me':
         self.to_name = name
       self.message(name, sms["text"])
+    self.curses_lock.release()
 
   def timedupdate(self, timeout):
     """ Update the display now and fire this method again in
