@@ -74,6 +74,9 @@ class Chat(object):
     self.chatscreen = curses.newwin(globaly-Chat.CHATBOX_SIZE, globalx, 0, 0)
     self.entryscreen = curses.newwin(Chat.CHATBOX_SIZE, globalx, globaly-Chat.CHATBOX_SIZE, 0)
 
+    # only block for 500ms when waiting for a character
+    self.entryscreen.timeout(500)
+
     self.textpad = _Textbox(self.entryscreen, insert_mode=True)
     self.textpad.stripspaces = True
     self.history = []
@@ -149,8 +152,20 @@ class Chat(object):
 
   def user_input(self):
     """ Get some user input and return it. """
-    cmd = self.textpad.edit()
+    def validator(ch):
+      try:
+        self.curses_lock.release()
+        if ch < 0:
+          return None
+        return ch
+      finally:
+        self.curses_lock.acquire()
+
+    self.curses_lock.acquire()
+    cmd = self.textpad.edit(validator)
     self.entryscreen.clear()
+    self.curses_lock.release()
+
     # strip the newlines out of the middle of the words
     cmd = string.replace(cmd, '\n', '')
     # remove unprintable characters
