@@ -119,7 +119,7 @@ class Chat(object):
     constructor of Chat, runs until self.running is set to False. """
     while self.running:
       try:
-        msg = self.q.get(True, self.blocktime)
+        msg = self.q.get(True, max(self.blocktime / 1000, 1))
         self.send(msg)
         self.update()
       except Empty:
