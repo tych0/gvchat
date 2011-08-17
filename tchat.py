@@ -368,10 +368,6 @@ def main():
       running = True
 
       # set up handlers
-      def quit():
-        running = False
-      chat.register_command(quit)
-
       def refresh():
         chat.getsms()
       chat.register_command(refresh)
