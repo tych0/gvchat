@@ -2,7 +2,5 @@
   (roster suppport in chat window?)
 * add a timer to the status bar to indicate when the next refresh is going to
   happen
-* add generic support for "commands" (things prefixed with /) to the chat
-  client
 * add default status bar drawing so client's don't have to know the ncurses
   voodoo to draw their own status bars
