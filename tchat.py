@@ -21,6 +21,7 @@ import itertools
 
 from curses.textpad import Textbox
 from BeautifulSoup import SoupStrainer, BeautifulSoup, BeautifulStoneSoup
+from Queue import Queue, Empty
 
 from googlevoice import Voice
 from googlevoice.util import LoginError
@@ -55,6 +56,9 @@ def synchronized(lock_name):
     return new_function
   return wrap
 
+class CommandError(Exception):
+  pass
+
 class Chat(object):
   """ Implements an ncurses chat client. It has two windows on the
   virtual screen: one for displaying chat history and one for
@@ -64,36 +68,64 @@ class Chat(object):
 
   CHATBOX_SIZE = 3
 
-  def __init__(self):
+  def __init__(self, blocktime=500):
+    self.blocktime = blocktime
+    
     self.curses_lock = threading.RLock()
 
     self.global_screen = curses.initscr()
     (globaly, globalx) = self.global_screen.getmaxyx()
     curses.noecho()
-    # one row for status bar, and CHATBOX_SIZE rowsd for the chatbox
+    # one row for status bar, and CHATBOX_SIZE rows for the chatbox
     self.chatscreen = curses.newwin(globaly-Chat.CHATBOX_SIZE, globalx, 0, 0)
     self.entryscreen = curses.newwin(Chat.CHATBOX_SIZE, globalx, globaly-Chat.CHATBOX_SIZE, 0)
 
-    # only block for 500ms when waiting for a character
-    self.entryscreen.timeout(500)
+    # only block for blocktime ms when waiting for a character
+    self.entryscreen.timeout(self.blocktime)
 
+    # Set up the text entry.
     self.textpad = _Textbox(self.entryscreen, insert_mode=True)
     self.textpad.stripspaces = True
     self.history = []
 
+    # Curses things to make the cursor behave correctly.
     self.global_screen.leaveok(True)
     self.chatscreen.leaveok(True)
     self.entryscreen.leaveok(False)
 
+    # initially, we have no commands
+    self.commands = {}
+
+    # set up the queue thread
+    self.q = Queue()
+    self.running = True
+    t = threading.Thread(target=self._queue_thread)
+    t.start()
+
+    # Now, draw the initial screen/status bar
     self.update()
 
   def __enter__(self):
     return self
 
   def __exit__(self, type, value, traceback):
+    self.running = False
     curses.nocbreak()
     curses.echo()
     curses.endwin()
+
+  def _queue_thread(self):
+    """ Thread for managing the queue. Started automatically once by the
+    constructor of Chat, runs until self.running is set to False. """
+    while self.running:
+      try:
+        msg = self.q.get(True, self.blocktime)
+        self.send(msg)
+        self.update()
+      except Empty:
+        pass
+      except KeyboardInterrupt:
+        self.running = False
 
   @synchronized("curses_lock")
   def status(self):
@@ -169,8 +201,53 @@ class Chat(object):
 
     # strip the newlines out of the middle of the words
     cmd = string.replace(cmd, '\n', '')
+
     # remove unprintable characters
-    return (''.join(c if c in string.printable else '' for c in cmd)).strip()
+    cmd = (''.join(c if c in string.printable else '' for c in cmd)).strip()
+
+    # process commands if necessary
+    if cmd.startswith('/'):
+      words = cmd.split()
+      cmdname = words[0][1:]
+      args = words[1:]
+
+      if cmdname in self.commands:
+        try:
+          self.commands[cmdname](*args)
+        except CommandError as e:
+          self.message('System:', 'Problem executing command: ' + str(e))
+        except TypeError as e:
+          self.message('System:', str(e))
+      else:
+        self.message('System:', 'Unknown command: '+cmdname)
+    else:
+      # it's not a cmd so it must be a message to send
+      self.q.put(cmd)
+    self.update()
+
+  def register_command(self, func):
+    """ A command is something the user can enter, such as /nick to change
+    their nickname or /refresh to refresh something. Chat automatically handles
+    commands: the name of the function should be the name of the command (e.g.
+    `nick' or `refresh' above) and func should be a function which processes
+    the command.
+    
+    func will recieve the user's arguments to the command as individual
+    arguments to the function (i.e. `/refresh one two three' will call 
+      func('one', 'two', 'three')
+    If the number of arguments the user provided does not match the number func
+    expects, an error message will be given to the user. 
+
+    If func encouters an error and wishes to notify the user, it should raise a
+    LoginError. func's return value is ignored.
+
+    func will be called in the main GUI thread, but without the curses lock.
+    """
+    self.commands[func.__name__] = func
+
+  def remove_command(self, func):
+    """ Remove a command which has been registered. """
+    del self.commands[func.__name__]
 
   @synchronized("curses_lock")
   def message(self, who, what):
@@ -183,6 +260,11 @@ class Chat(object):
     # in self.history, since messages might be longer than one line and wrap.)
     if len(self.history) > rows:
       self.history = self.history[-rows:]
+  
+  def send(self, msg):
+    """ This method is called when the user generates a message to send. It
+    should be overridden by base classes to be have appropriately. """
+    self.message('Me', msg)
 
 class GVChat(Chat):
   """ Implements a google voice chat client. """
@@ -190,29 +272,18 @@ class GVChat(Chat):
     self.gv = Voice()
     self.gv.login(user, password)
 
-    self.thread_count_lock = threading.Lock()
-    self.thread_count = 0
     self.to_phone = None
     self.to_name  = None
 
     Chat.__init__(self)
-
-    self.timer = None
-    self.timedupdate(30)
-
-  @synchronized("thread_count_lock")
-  def increment_thread_count(self):
-    self.thread_count += 1
-
-  @synchronized("thread_count_lock")
-  def decrement_thread_count(self):
-    self.thread_count -= 1
+    self.getsms()
+    self.update()
 
   @synchronized("curses_lock")
   def status(self):
     """ Draw a fancy status bar. It has a * if there are pending google
     requests and lists the chatter's name and phone number. """
-    active = '*' if self.thread_count > 0 else '-'
+    active = '*' if self.q.qsize() > 0 else '-'
 
     if self.to_phone:
       phone = '(%s) %s - %s' % (self.to_phone[:3], self.to_phone[3:6], self.to_phone[6:])
@@ -271,23 +342,7 @@ class GVChat(Chat):
       self.message(name, sms["text"])
     self.curses_lock.release()
 
-  def timedupdate(self, timeout):
-    """ Update the display now and fire this method again in
-    `timeout' seconds. """
-    self.increment_thread_count()
-    self.update()
-
-    self.getsms()
-
-    self.decrement_thread_count()
-    self.update()
-
-    # recycle the timedupdate
-    self.timer = threading.Timer(timeout, self.timedupdate, args=[timeout])
-    self.timer.start()
-
   def __exit__(self, type, value, traceback):
-    self.timer.cancel()
     self.gv.logout()
     Chat.__exit__(self, type, value, traceback)
   
@@ -295,6 +350,10 @@ class GVChat(Chat):
     if not self.to_phone:
       raise ValueError("No phone number :-(")
     self.gv.send_sms(self.to_phone, msg)
+  
+  def send(self, msg):
+    self.sendsms(msg)
+    self.getsms()
 
 def main():
   passwd = None
@@ -307,40 +366,22 @@ def main():
   try:
     with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
       running = True
+
+      # set up handlers
+      def quit():
+        running = False
+      chat.register_command(quit)
+
+      def refresh():
+        chat.getsms()
+      chat.register_command(refresh)
+
       while running:
-        cmd = chat.user_input()
-        if cmd == '/quit':
-          running = False
-        if cmd == '/refresh':
-          chat.getsms()
-        if not cmd.startswith('/'):
-          # Spawn a thread to handle sending the SMS and updating the chat
-          # screen. This way the UI doesn't block for users when google is being
-          # slow to respond :-)
-          def sms_sender_thread():
-            try:
-              # The number of pending responses.
-              chat.increment_thread_count()
-
-              # Redraw the status bar to let the user know we're active.
-              chat.update()
-
-              chat.sendsms(cmd)
-              chat.getsms()
-
-              # No more pending requests
-              chat.decrement_thread_count()
-
-              # tell the user we've deactivated
-              chat.update()
-            except KeyboardInterrupt:
-              running = False
-
-          t = threading.Thread(target=sms_sender_thread)
-          t.start()
+        chat.user_input()
   except LoginError:
     print 'Login failed.'
   except KeyboardInterrupt:
     pass
+
 if __name__ == "__main__":
   main()

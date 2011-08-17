@@ -1,8 +1,8 @@
 * add spellchecking to textbox add ability to initiate new text messages
   (roster suppport in chat window?)
-* rework synchronization and add some more documentation so that it's a little
-  more obvious what's going on
 * add a timer to the status bar to indicate when the next refresh is going to
   happen
 * add generic support for "commands" (things prefixed with /) to the chat
   client
+* add default status bar drawing so client's don't have to know the ncurses
+  voodoo to draw their own status bars
