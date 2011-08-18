@@ -212,9 +212,18 @@ class Chat(object):
 
   def user_input(self):
     """ Get some user input and return it. """
+
+    # Above, we set the timeout of getch() on entryscreen to 500ms. That means
+    # that the invalid character (-1) is returned every 500 ms if the user
+    # enters nothing, and our validator is called. We take this opportunity to
+    # relese the curses lock so any other threads (e.g. the message handling
+    # thread) have a chance to update the screen. Additionally, we call
+    # update() so that any other changes are picked up.
+
     def validator(ch):
       try:
         self.curses_lock.release()
+        self.update() # has anything changed?
         if ch < 0:
           return None
         return ch
@@ -286,7 +295,7 @@ class Chat(object):
     def wrapper():
       if self.running:
         if func():
-          t = threading.Timer(time, wrapper)
+          t = threading.Timer(freq, wrapper)
 
           self.events_lock.acquire()
           self.events.append(t)
@@ -321,13 +330,13 @@ class GVChat(Chat):
     self.to_phone = None
     self.to_name  = None
 
-    Chat.__init__(self)
-    
     self.polltime = 30
     self.step = 0 # fire immediately so that we have data to display
+
+    Chat.__init__(self)
+    
     self.register_event(1, self._update_poll_time)
 
-  @synchronized("curses_lock")
   def status(self):
     """ Draw a fancy status bar displaying the person's name and phone number.  """
     if self.to_phone:
@@ -337,15 +346,15 @@ class GVChat(Chat):
 
     name = self.to_name if self.to_name else ''
 
-    return ' %s | %s ' % (name, phone)
+    return ' poll in %ds | %s | %s ' % (self.step, name, phone)
     
   def _update_poll_time(self):
     if self.step == 0:
-      self.step = self.polltime
       self.getsms()
-      self.update()
+      self.step = self.polltime
     else:
       self.step -= 1
+    return True # always keep polling
 
   def getsms(self):
     """ Update the GVChat object with the first SMS thread in your
@@ -383,13 +392,11 @@ class GVChat(Chat):
         self.smses.append(msgitem)
     
     # Now that we have the SMSes, we can add their text and render them.
-    self.curses_lock.acquire()
     for sms in self.smses:
       name = sms["from"][:-1]
       if name != 'Me':
         self.to_name = name
       self.message(name, sms["text"])
-    self.curses_lock.release()
 
   def __exit__(self, type, value, traceback):
     self.gv.logout()

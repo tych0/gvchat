@@ -1,6 +1,2 @@
-* add spellchecking to textbox add ability to initiate new text messages
-  (roster suppport in chat window?)
-* add a timer to the status bar to indicate when the next refresh is going to
-  happen
-* add default status bar drawing so client's don't have to know the ncurses
-  voodoo to draw their own status bars
+* add spellchecking to textbox
+* add ability to initiate new text messages (roster suppport in chat window?)
