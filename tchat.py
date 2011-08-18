@@ -278,9 +278,9 @@ class Chat(object):
 
           self.events_lock.acquire()
           self.events.append(t)
+          t.start()
           self.events_lock.release()
 
-          t.start()
     wrapper()
 
   @synchronized("curses_lock")
@@ -310,8 +310,10 @@ class GVChat(Chat):
     self.to_name  = None
 
     Chat.__init__(self)
-    self.getsms()
-    self.update()
+    
+    self.polltime = 30
+    self.step = 0
+    self.register_event(1, self._update_poll_time)
 
   @synchronized("curses_lock")
   def status(self):
@@ -331,6 +333,14 @@ class GVChat(Chat):
 
     status_string = form.format(' %s | %s ' % (name, phone))
     self.chatscreen.addstr(y-1, 0, status_string)
+
+  def _update_poll_time(self):
+    if self.step == 0:
+      self.step = self.polltime
+      self.getsms()
+      self.update()
+    else:
+      self.step -= 1
 
   def getsms(self):
     """ Update the GVChat object with the first SMS thread in your
