@@ -349,6 +349,15 @@ class GVChat(Chat):
   def sendsms(self, msg):
     if not self.to_phone:
       raise ValueError("No phone number :-(")
+    
+    # BeautifulSoup chokes on some characters, and they will cause GVChat to
+    # break until a new SMS thread is started. Typically, these characters
+    # aren't in text messages, but they are easily accidentally pressed on the
+    # keyboard. We remove them here and warn the user.
+    for c in ']':
+      if c in msg:
+        msg = string.replace(msg, c, '')
+
     self.gv.send_sms(self.to_phone, msg)
   
   def send(self, msg):
