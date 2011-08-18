@@ -72,6 +72,7 @@ class Chat(object):
     self.blocktime = blocktime
     
     self.curses_lock = threading.RLock()
+    self.events_lock = threading.RLock()
 
     self.global_screen = curses.initscr()
     (globaly, globalx) = self.global_screen.getmaxyx()
@@ -93,8 +94,9 @@ class Chat(object):
     self.chatscreen.leaveok(True)
     self.entryscreen.leaveok(False)
 
-    # initially, we have no commands
+    # initially, we have no commands or events
     self.commands = {}
+    self.events = []
 
     # set up the queue thread
     self.q = Queue()
@@ -109,14 +111,23 @@ class Chat(object):
     return self
 
   def __exit__(self, type, value, traceback):
+    # stop the queue thread
     self.running = False
+
+    # cancel any pending events
+    self.events_lock.acquire()
+    map(lambda t: t.cancel(), self.events)
+    self.events_lock.release()
+
+    # reset the screen
     curses.nocbreak()
     curses.echo()
     curses.endwin()
 
   def _queue_thread(self):
     """ Thread for managing the queue. Started automatically once by the
-    constructor of Chat, runs until self.running is set to False. """
+    constructor of Chat, runs until self.running is set to False. We also
+    hijack this thread to prune the dead events from the events list. """
     while self.running:
       try:
         msg = self.q.get(True, max(self.blocktime / 1000, 1))
@@ -127,6 +138,10 @@ class Chat(object):
       except KeyboardInterrupt:
         self.running = False
 
+      # Prune the events list of dead events
+      self.events_lock.acquire()
+      self.events = filter(lambda t: t.is_alive(), self.events)
+      self.events_lock.release()
   @synchronized("curses_lock")
   def status(self):
     """ Draw a generic status bar of "-"s. """
@@ -249,6 +264,25 @@ class Chat(object):
     """ Remove a command which has been registered. """
     del self.commands[func.__name__]
 
+  def register_event(self, freq, func):
+    """ Register an event. An event is something that happens every so often.
+    Chat provides a way to manage these events automatically: by registering
+    them here. Chat will continue to call `func' with frequency `freq' until
+    the client exits (cleanup happens automatically). If `func' returns something
+    which evaluates to false, the event sequence is terminated. `func' is
+    called once initially."""
+    def wrapper():
+      if self.running:
+        if func():
+          t = threading.Timer(time, wrapper)
+
+          self.events_lock.acquire()
+          self.events.append(t)
+          t.start()
+          self.events_lock.release()
+
+    wrapper()
+
   @synchronized("curses_lock")
   def message(self, who, what):
     """ Add a message to the history. """
@@ -276,8 +310,10 @@ class GVChat(Chat):
     self.to_name  = None
 
     Chat.__init__(self)
-    self.getsms()
-    self.update()
+    
+    self.polltime = 30
+    self.step = 0
+    self.register_event(1, self._update_poll_time)
 
   @synchronized("curses_lock")
   def status(self):
@@ -297,6 +333,14 @@ class GVChat(Chat):
 
     status_string = form.format(' %s | %s ' % (name, phone))
     self.chatscreen.addstr(y-1, 0, status_string)
+
+  def _update_poll_time(self):
+    if self.step == 0:
+      self.step = self.polltime
+      self.getsms()
+      self.update()
+    else:
+      self.step -= 1
 
   def getsms(self):
     """ Update the GVChat object with the first SMS thread in your
@@ -349,6 +393,15 @@ class GVChat(Chat):
   def sendsms(self, msg):
     if not self.to_phone:
       raise ValueError("No phone number :-(")
+    
+    # BeautifulSoup chokes on some characters, and they will cause GVChat to
+    # break until a new SMS thread is started. Typically, these characters
+    # aren't in text messages, but they are easily accidentally pressed on the
+    # keyboard. We remove them here and warn the user.
+    for c in ']':
+      if c in msg:
+        msg = string.replace(msg, c, '')
+
     self.gv.send_sms(self.to_phone, msg)
   
   def send(self, msg):
