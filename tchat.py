@@ -142,11 +142,23 @@ class Chat(object):
       self.events_lock.acquire()
       self.events = filter(lambda t: t.is_alive(), self.events)
       self.events_lock.release()
+
   @synchronized("curses_lock")
-  def status(self):
-    """ Draw a generic status bar of "-"s. """
+  def _drawstatus(self):
+    """ Draw a generic status bar of "*"s or "-"s depending on whether or not
+    there are messages in the queue. """
     (y, x) = self.chatscreen.getmaxyx()
-    self.chatscreen.addstr(y-1, 0, '-' * (x-1))
+
+    fillchar = '*' if self.q.qsize() > 0 else '-'
+    form = '{:'+ fillchar +'^' + str(x - 1) + '}'
+
+    self.chatscreen.addstr(y-1, 0, form.format('%s' % self.status()))
+
+  def status(self):
+    """ By default, just indicate whether there are pending things in the
+    queue. Users should override this method if they would like to provide a
+    richer status bar. """
+    return ''
 
   @synchronized("curses_lock")
   def update(self):
@@ -190,7 +202,7 @@ class Chat(object):
       self.chatscreen.addstr(row, 0, line) 
       self.chatscreen.clrtoeol()
 
-    self.status()
+    self._drawstatus()
 
     self.entryscreen.move(cursory, cursorx)
     self.entryscreen.cursyncup()
@@ -312,28 +324,21 @@ class GVChat(Chat):
     Chat.__init__(self)
     
     self.polltime = 30
-    self.step = 0
+    self.step = 0 # fire immediately so that we have data to display
     self.register_event(1, self._update_poll_time)
 
   @synchronized("curses_lock")
   def status(self):
-    """ Draw a fancy status bar. It has a * if there are pending google
-    requests and lists the chatter's name and phone number. """
-    active = '*' if self.q.qsize() > 0 else '-'
-
+    """ Draw a fancy status bar displaying the person's name and phone number.  """
     if self.to_phone:
       phone = '(%s) %s - %s' % (self.to_phone[:3], self.to_phone[3:6], self.to_phone[6:])
     else:
       phone = ''
 
     name = self.to_name if self.to_name else ''
+
+    return ' %s | %s ' % (name, phone)
     
-    (y, x) = self.chatscreen.getmaxyx()
-    form = '{:'+ active +'^' + str(x - 1) + '}'
-
-    status_string = form.format(' %s | %s ' % (name, phone))
-    self.chatscreen.addstr(y-1, 0, status_string)
-
   def _update_poll_time(self):
     if self.step == 0:
       self.step = self.polltime
