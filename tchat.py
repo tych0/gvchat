@@ -101,6 +101,7 @@ class Chat(object):
     # set up the queue thread
     self.q = Queue()
     self.running = True
+    self.busy = False
     t = threading.Thread(target=self._queue_thread)
     t.start()
 
@@ -131,9 +132,11 @@ class Chat(object):
     while self.running:
       try:
         msg = self.q.get(True, max(self.blocktime / 1000, 1))
+        self.busy = True
         self.send(msg)
         self.update()
       except Empty:
+        self.busy = False
         pass
       except KeyboardInterrupt:
         self.running = False
@@ -149,7 +152,7 @@ class Chat(object):
     there are messages in the queue. """
     (y, x) = self.chatscreen.getmaxyx()
 
-    fillchar = '*' if self.q.qsize() > 0 else '-'
+    fillchar = '*' if self.busy > 0 else '-'
     form = '{:'+ fillchar +'^' + str(x - 1) + '}'
 
     self.chatscreen.addstr(y-1, 0, form.format('%s' % self.status()))
