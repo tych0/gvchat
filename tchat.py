@@ -422,7 +422,7 @@ class GVChat(Chat):
     self.gv.logout()
     Chat.__exit__(self, type, value, traceback)
   
-  def sendsms(self, msg):
+  def send(self, msg):
     if not self.to_phone:
       raise ValueError("No phone number :-(")
     
@@ -435,9 +435,10 @@ class GVChat(Chat):
         msg = string.replace(msg, c, '')
 
     self.gv.send_sms(self.to_phone, msg)
-  
-  def send(self, msg):
-    self.sendsms(msg)
+
+    # We could use self.message() or wait until the next poll to alert the user
+    # that we sent the message, but we might as well check for new messages
+    # while we're sending.
     self.getsms()
 
 def main():
