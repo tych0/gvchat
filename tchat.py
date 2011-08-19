@@ -103,12 +103,11 @@ class Chat(object):
     self.q = Queue()
     self.running = True
     self.busy = False
-    t = threading.Thread(target=self._queue_thread)
-    t.start()
+    self.qt = threading.Thread(target=self._queue_thread)
+    self.qt.start()
 
     # Now, draw the initial screen/status bar
     self.update()
-
 
   def __enter__(self):
     # Just shutdown nicely when the user wants to.
@@ -119,13 +118,17 @@ class Chat(object):
     return self
 
   def __exit__(self, type, value, traceback):
-    # stop the queue thread
+    # stop the other threads
     self.running = False
 
     # cancel any pending events
     self.events_lock.acquire()
     map(lambda t: t.cancel(), self.events)
     self.events_lock.release()
+
+    # wait for everything to stop before unitializing curses
+    map(lambda t: t.join(), self.events)
+    self.qt.join()
 
     # reset the screen
     curses.nocbreak()
