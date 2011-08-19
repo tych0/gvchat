@@ -304,7 +304,6 @@ class Chat(object):
 
     wrapper()
 
-  @synchronized("curses_lock")
   def message(self, who, what):
     """ Add a message to the history. """
     (rows, cols) = self.chatscreen.getmaxyx()
@@ -392,11 +391,13 @@ class GVChat(Chat):
         self.smses.append(msgitem)
     
     # Now that we have the SMSes, we can add their text and render them.
+    self.curses_lock.acquire()
     for sms in self.smses:
       name = sms["from"][:-1]
       if name != 'Me':
         self.to_name = name
       self.message(name, sms["text"])
+    self.curses_lock.release()
 
   def __exit__(self, type, value, traceback):
     self.gv.logout()
