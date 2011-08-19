@@ -226,7 +226,10 @@ class Chat(object):
     # enters nothing, and our validator is called. We take this opportunity to
     # relese the curses lock so any other threads (e.g. the message handling
     # thread) have a chance to update the screen. Additionally, we call
-    # update() so that any other changes are picked up.
+    # update() so that any other changes are picked up. We raise _StoppedError
+    # to get out of the surrounding loop in edit() so that we can exit this
+    # function cleanly and without hijacking any other exceptions (such as
+    # KeyboardInterrupt).
 
     class _StoppedError(Exception):
       pass
