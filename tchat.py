@@ -18,6 +18,7 @@ import re
 import keyring
 import string
 import itertools
+import signal
 
 from curses.textpad import Textbox
 from BeautifulSoup import SoupStrainer, BeautifulSoup, BeautifulStoneSoup
@@ -108,7 +109,13 @@ class Chat(object):
     # Now, draw the initial screen/status bar
     self.update()
 
+
   def __enter__(self):
+    # Just shutdown nicely when the user wants to.
+    def int_handler(signo, frame):
+      self.running = False
+    signal.signal(signal.SIGINT, int_handler)
+
     return self
 
   def __exit__(self, type, value, traceback):
@@ -138,8 +145,6 @@ class Chat(object):
       except Empty:
         self.busy = False
         pass
-      except KeyboardInterrupt:
-        self.running = False
 
       # Prune the events list of dead events
       self.events_lock.acquire()
@@ -223,9 +228,14 @@ class Chat(object):
     # thread) have a chance to update the screen. Additionally, we call
     # update() so that any other changes are picked up.
 
+    class _StoppedError(Exception):
+      pass
+
     def validator(ch):
       try:
         self.curses_lock.release()
+        if not self.running:
+          raise _StoppedError
         self.update() # has anything changed?
         if ch < 0:
           return None
@@ -233,10 +243,14 @@ class Chat(object):
       finally:
         self.curses_lock.acquire()
 
-    self.curses_lock.acquire()
-    cmd = self.textpad.edit(validator)
-    self.entryscreen.clear()
-    self.curses_lock.release()
+    try:
+      self.curses_lock.acquire()
+      cmd = self.textpad.edit(validator)
+      self.entryscreen.clear()
+    except _StoppedError:
+      return ''
+    finally:
+      self.curses_lock.release()
 
     # strip the newlines out of the middle of the words
     cmd = string.replace(cmd, '\n', '')
@@ -352,7 +366,9 @@ class GVChat(Chat):
     
   def _update_poll_time(self):
     if self.step == 0:
+      self.busy = True
       self.getsms()
+      self.busy = False
       self.step = self.polltime
     else:
       self.step -= 1
@@ -434,19 +450,20 @@ def main():
     pass
   try:
     with GVChat(GOOGLE_VOICE_USERNAME, passwd) as chat:
-      running = True
 
       # set up handlers
+      def quit():
+        chat.running = False
+      chat.register_command(quit)
+
       def refresh():
         chat.getsms()
       chat.register_command(refresh)
 
-      while running:
+      while chat.running:
         chat.user_input()
   except LoginError:
     print 'Login failed.'
-  except KeyboardInterrupt:
-    pass
 
 if __name__ == "__main__":
   main()
