@@ -417,11 +417,21 @@ class GVChat(Chat):
     
     # Now that we have the SMSes, we can add their text and render them.
     self.curses_lock.acquire()
+    oldlast = ''
+    try:
+      oldlast = self.history[-1]
+    except IndexError:
+      pass
+
     for sms in self.smses:
       name = sms["from"][:-1]
       if name != 'Me':
         self.to_name = name
       self.message(name, sms["text"])
+
+    # if we got a new message, sound the terminal bell
+    if self.history[-1] != oldlast:
+      curses.beep()
     self.curses_lock.release()
 
   def __exit__(self, type, value, traceback):
