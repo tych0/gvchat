@@ -429,8 +429,10 @@ class GVChat(Chat):
         self.to_name = name
       self.message(name, sms["text"])
 
-    # if we got a new message, sound the terminal bell
-    if self.history[-1] != oldlast:
+    # if we got a new message, sound the terminal bell, but not for
+    # messages from me
+    if self.history[-1] != oldlast and \
+       not self.history[-1].startswith('Me'):
       curses.beep()
     self.curses_lock.release()
 
