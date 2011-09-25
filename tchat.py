@@ -372,9 +372,7 @@ class GVChat(Chat):
     
   def _update_poll_time(self):
     if self.step == 0:
-      self.busy = True
       self.getsms()
-      self.busy = False
       self.step = self.polltime
     else:
       self.step -= 1
