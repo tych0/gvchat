@@ -432,7 +432,7 @@ class GVChat(Chat):
       every point in a list. """
       try:
         for i in xrange(len(haystack)):
-          if haystack[i:len(needle)] == needle:
+          if haystack[i:i+len(needle)] == needle:
             return i
       except IndexError:
         pass
