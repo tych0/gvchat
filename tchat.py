@@ -440,7 +440,8 @@ class GVChat(Chat):
 
     # only print new messages
     try:
-      idx = sublist_index(smses, self.history)
+      msgs = map(lambda m: m['from']+' '+m['text'], smses)
+      idx = sublist_index(msgs, self.history)
       smses = smses[idx + len(self.history):]
     except ValueError:
       # if we didn't find anything, then print everything
