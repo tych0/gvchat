@@ -1,2 +1,3 @@
+* see about speeding up getsms(); beautifulsoup is rather slow it seems
 * add spellchecking to textbox
 * add ability to initiate new text messages (roster suppport in chat window?)
