@@ -328,7 +328,12 @@ class Chat(object):
     wrapper()
 
   def message(self, who, what):
-    """ Add a message to the history. """
+    """ Add a message to the history. NOTE: This method does not acquire
+    curses_lock. This is perhaps safe (nobody else in Chat edits history, so
+    they will only read outdated state), however it is undesirable. It is
+    recommended to acquire curses_lock before calling this method. This also
+    enables applications to indicate to users interesting messages via
+    curses.beep() safely, since they have the curses_lock at this point. """
     (rows, cols) = self.chatscreen.getmaxyx()
     self.history.append(who+': '+what)
 
@@ -399,7 +404,7 @@ class GVChat(Chat):
     m = re.search('\((\d{3})\) (\d{3})-(\d{4})', msgtype)
     self.to_phone = ''.join(m.groups())
 
-    self.smses = [] 
+    smses = [] 
     # we only want the first conversation
     conversation = tree.find("div", attrs={"id" : True},recursive=False)
     msgs = conversation.findAll(attrs={"class" : "gc-message-sms-row"})
@@ -413,27 +418,44 @@ class GVChat(Chat):
         msgitem["text"] = BeautifulStoneSoup(msgitem["text"],
                               convertEntities=BeautifulStoneSoup.HTML_ENTITIES
                             ).contents[0]
-        self.smses.append(msgitem)
+        smses.append(msgitem)
     
     # Now that we have the SMSes, we can add their text and render them.
     self.curses_lock.acquire()
-    oldlast = ''
+
+    # If smses is shorter than history, we started a new thread, so clear the
+    # history.
+    if len(smses) < len(self.history):
+      self.history = []
+
+    def sublist_index(haystack, needle):
+      """ Find the starting index of a sublist in a list. Premature
+      optimization is the root of all evil. The empty list is a sublist of
+      every point in a list. """
+      try:
+        for i in xrange(len(haystack)):
+          if haystack[i:len(needle)] == needle:
+            return i
+      except IndexError:
+        pass
+      raise ValueError
+
+    # only print new messages
     try:
-      oldlast = self.history[-1]
-    except IndexError:
+      idx = sublist_index(smses, self.history)
+      smses = smses[idx + len(self.history):]
+    except ValueError:
+      # if we didn't find anything, then print everything
       pass
 
-    for sms in self.smses:
+    for sms in smses:
       name = sms["from"][:-1]
       if name != 'Me':
         self.to_name = name
+        # if we're adding a message that's not from me, beep
+        curses.beep()
       self.message(name, sms["text"])
 
-    # if we got a new message, sound the terminal bell, but not for
-    # messages from me
-    if self.history[-1] != oldlast and \
-       not self.history[-1].startswith('Me'):
-      curses.beep()
     self.curses_lock.release()
 
   def __exit__(self, type, value, traceback):
