@@ -238,6 +238,14 @@ class Chat(object):
       pass
 
     def validator(ch):
+      if ch == curses.KEY_RESIZE:
+        self.chatscreen.clear()
+        (y, x) = self.global_screen.getmaxyx()
+        curses.resizeterm(y, x)
+        self.chatscreen.resize(y-Chat.CHATBOX_SIZE, x)
+        self.entryscreen.mvwin(y-Chat.CHATBOX_SIZE, 0)
+        self.update()
+        return None
       try:
         self.curses_lock.release()
         if not self.running:
