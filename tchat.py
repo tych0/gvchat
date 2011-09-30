@@ -433,6 +433,7 @@ class GVChat(Chat):
     # history.
     if len(smses) < len(self.history):
       self.history = []
+      self.chatscreen.clear()
 
     def sublist_index(haystack, needle):
       """ Find the starting index of a sublist in a list. Premature
